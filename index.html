@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <title>Учет студентов - практика</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    body { font-family: Arial, sans-serif; background: #f0f0ff; margin: 0; padding: 20px; }
+    .box { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 16px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    .hidden { display: none; }
+    input, select, button {
+      width: 100%; padding: 10px; margin: 8px 0; border-radius: 8px; border: 1px solid #ccc;
+    }
+    button {
+      background: #a88fff; color: white; border: none; cursor: pointer;
+    }
+    button:hover { background: #8f7be0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    mark { background-color: yellow; }
+  </style>
+</head>
+<body>
+
+<div class="box" id="roleSelect">
+  <h2>Выберите вход</h2>
+  <button onclick="selectRole('student')">Вход для студента</button>
+  <button onclick="selectRole('teacher')">Вход для преподавателя</button>
+</div>
+
+<div class="box hidden" id="studentFormBox">
+  <h2>Форма студента</h2>
+  <form id="studentForm">
+    <input type="text" id="fio" placeholder="ФИО СТУДЕНТА" required>
+    <input type="number" id="course" placeholder="КУРС" required>
+    <input type="text" id="group" placeholder="ГРУППА" required>
+    <input type="text" id="base" placeholder="БАЗА ПРАКТИКИ">
+    <input type="text" id="baseAddress" placeholder="АДРЕС БАЗЫ ПРАКТИКИ">
+    <input type="tel" id="basePhone" placeholder="КОНТАКТНЫЙ ТЕЛЕФОН БАЗЫ ПРАКТИКИ">
+    <input type="tel" id="studentPhone" placeholder="КОНТАКТНЫЙ ТЕЛЕФОН СТУДЕНТА">
+    <input type="text" id="orgSupervisor" placeholder="РУКОВОДИТЕЛЬ ПРАКТИКИ ОТ ОРГАНИЗАЦИИ">
+    <input type="text" id="practiceType" placeholder="ВИД ПРАКТИКИ">
+    <button type="submit">Отправить</button>
+  </form>
+</div>
+
+<div class="box hidden" id="teacherLogin">
+  <h2>Вход преподавателя</h2>
+  <input type="text" id="username" placeholder="Фамилия">
+  <input type="password" id="password" placeholder="Пароль">
+  <button id="loginTeacher">Войти</button>
+</div>
+
+<div class="box hidden" id="teacherApp">
+  <h2>Список студентов</h2>
+  <input type="text" id="search" placeholder="Поиск по ФИО">
+  <select id="filterCourse"><option value="">Все курсы</option></select>
+  <select id="filterGroup"><option value="">Все группы</option></select>
+  <select id="filterPracticeType"><option value="">Все виды практики</option></select>
+
+  <h3>Добавить / Изменить студента</h3>
+  <input type="text" id="fioT" placeholder="ФИО СТУДЕНТА">
+  <input type="number" id="courseT" placeholder="КУРС">
+  <input type="text" id="groupT" placeholder="ГРУППА">
+  <input type="text" id="baseT" placeholder="БАЗА ПРАКТИКИ">
+  <input type="text" id="baseAddressT" placeholder="АДРЕС БАЗЫ ПРАКТИКИ">
+  <input type="tel" id="basePhoneT" placeholder="КОНТАКТНЫЙ ТЕЛЕФОН БАЗЫ ПРАКТИКИ">
+  <input type="tel" id="studentPhoneT" placeholder="КОНТАКТНЫЙ ТЕЛЕФОН СТУДЕНТА">
+  <input type="text" id="orgSupervisorT" placeholder="РУКОВОДИТЕЛЬ ПРАКТИКИ ОТ ОРГАНИЗАЦИИ">
+  <input type="text" id="practiceTypeT" placeholder="ВИД ПРАКТИКИ">
+  <button onclick="saveStudent()">Сохранить</button>
+  <button onclick="clearForm()">Очистить</button>
+
+  <table id="studentTable">
+    <thead>
+      <tr>
+        <th>ФИО</th><th>Курс</th><th>Группа</th><th>База</th><th>Адрес</th><th>Тел. базы</th><th>Тел. студента</th><th>Руководитель</th><th>Вид</th><th>Действия</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<!-- JavaScript с Firebase -->
+<script>
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDNELjfZYbOGlJjQENGOHPe5hRk1PywYVE",
+    authDomain: "anifailsstud.firebaseapp.com",
+    projectId: "anifailsstud",
+    storageBucket: "anifailsstud.firebasestorage.app",
+    messagingSenderId: "364592968832",
+    appId: "1:364592968832:web:2da01a80686e62879d6265",
+    measurementId: "G-PTHZWHEWBG"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  
+// --- Глобальные функции для кнопок ---
+function selectRole(role) {
+  document.getElementById('roleSelect').classList.add('hidden');
+  if (role === 'student') {
+    const formBox = document.getElementById('studentFormBox');
+    formBox.classList.remove('hidden');
+
+    const form = document.getElementById("studentForm");
+    if (!form.dataset.bound) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const student = {
+          fio: document.getElementById("fio").value.trim(),
+          course: document.getElementById("course").value.trim(),
+          group: document.getElementById("group").value.trim(),
+          base: document.getElementById("base").value.trim(),
+          baseAddress: document.getElementById("baseAddress").value.trim(),
+          basePhone: document.getElementById("basePhone").value.trim(),
+          studentPhone: document.getElementById("studentPhone").value.trim(),
+          orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+          practiceType: document.getElementById("practiceType").value.trim()
+        };
+        await db.collection("students").add(student);
+        formBox.innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+      });
+      form.dataset.bound = "true";
+    }
+
+  } else {
+    document.getElementById('teacherLogin').classList.remove('hidden');
+  }
+}
+window.selectRole = selectRole;
+
+async function loginTeacher() {
+  const username = document.getElementById("username").value.trim().toLowerCase();
+  const password = document.getElementById("password").value.trim();
+  if (username === "федоренко" && password === "1234") {
+    document.getElementById("teacherLogin").classList.add("hidden");
+    document.getElementById("teacherApp").classList.remove("hidden");
+    await renderTable();
+  } else {
+    alert("Неверные данные!");
+  }
+}
+window.loginTeacher = loginTeacher;
+
+// Теперь запускаем остальные скрипты после загрузки
+document.addEventListener("DOMContentLoaded", function () {
+  document.getElementById("studentForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const student = {
+      fio: document.getElementById("fio").value.trim(),
+      course: document.getElementById("course").value.trim(),
+      group: document.getElementById("group").value.trim(),
+      base: document.getElementById("base").value.trim(),
+      baseAddress: document.getElementById("baseAddress").value.trim(),
+      basePhone: document.getElementById("basePhone").value.trim(),
+      studentPhone: document.getElementById("studentPhone").value.trim(),
+      orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+      practiceType: document.getElementById("practiceType").value.trim()
+    };
+    await db.collection("students").add(student);
+    document.getElementById('studentFormBox').innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+  });
+
+
+    let editId = null;
+
+    async function loadStudents() {
+      const snapshot = await db.collection("students").get();
+      const students = [];
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        data.id = doc.id;
+        students.push(data);
+      });
+      return students;
+    }
+
+    
+    function selectRole(role) {
+      document.getElementById('roleSelect').classList.add('hidden');
+      if (role === 'student') {
+        const formBox = document.getElementById('studentFormBox');
+        formBox.classList.remove('hidden');
+
+        const form = document.getElementById("studentForm");
+        if (!form.dataset.bound) {
+          form.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const student = {
+              fio: document.getElementById("fio").value.trim(),
+              course: document.getElementById("course").value.trim(),
+              group: document.getElementById("group").value.trim(),
+              base: document.getElementById("base").value.trim(),
+              baseAddress: document.getElementById("baseAddress").value.trim(),
+              basePhone: document.getElementById("basePhone").value.trim(),
+              studentPhone: document.getElementById("studentPhone").value.trim(),
+              orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+              practiceType: document.getElementById("practiceType").value.trim()
+            };
+            await db.collection("students").add(student);
+            formBox.innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+          });
+          form.dataset.bound = "true";
+        }
+
+      } else {
+        document.getElementById('teacherLogin').classList.remove('hidden');
+      }
+    }
+    
+      document.getElementById('roleSelect').classList.add('hidden');
+      if (role === 'student') {
+        document.getElementById('studentFormBox').classList.remove('hidden');
+      } else {
+        document.getElementById('teacherLogin').classList.remove('hidden');
+      }
+    }
+
+    window.selectRole = selectRole;
+
+    document.getElementById("studentForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const student = {
+        fio: document.getElementById("fio").value.trim(),
+        course: document.getElementById("course").value.trim(),
+        group: document.getElementById("group").value.trim(),
+        base: document.getElementById("base").value.trim(),
+        baseAddress: document.getElementById("baseAddress").value.trim(),
+        basePhone: document.getElementById("basePhone").value.trim(),
+        studentPhone: document.getElementById("studentPhone").value.trim(),
+        orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+        practiceType: document.getElementById("practiceType").value.trim()
+      };
+      await db.collection("students").add(student);
+      document.getElementById('studentFormBox').innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+    });
+
+    async function loginTeacher() {
+      const username = document.getElementById("username").value.trim().toLowerCase();
+      const password = document.getElementById("password").value.trim();
+      if (username === "федоренко" && password === "1234") {
+        document.getElementById("teacherLogin").classList.add("hidden");
+        document.getElementById("teacherApp").classList.remove("hidden");
+        await renderTable();
+      } else {
+        alert("Неверные данные!");
+      }
+    }
+
+    document.getElementById("loginTeacher").onclick = loginTeacher;
+    window.loginTeacher = loginTeacher;
+
+    async function renderTable() {
+      const students = await loadStudents();
+      const tbody = document.querySelector("#studentTable tbody");
+      const search = document.getElementById("search").value.trim().toLowerCase();
+      const filterCourse = document.getElementById("filterCourse").value;
+      const filterGroup = document.getElementById("filterGroup").value;
+      const filterPracticeType = document.getElementById("filterPracticeType").value;
+      tbody.innerHTML = "";
+
+      const courseSet = new Set(), groupSet = new Set(), typeSet = new Set();
+
+      students.forEach((s) => {
+        courseSet.add(s.course);
+        groupSet.add(s.group);
+        typeSet.add(s.practiceType);
+
+        if ((search && !s.fio.toLowerCase().includes(search)) ||
+          (filterCourse && s.course !== filterCourse) ||
+          (filterGroup && s.group !== filterGroup) ||
+          (filterPracticeType && s.practiceType !== filterPracticeType)) return;
+
+        const row = tbody.insertRow();
+        const fields = ['fio', 'course', 'group', 'base', 'baseAddress', 'basePhone', 'studentPhone', 'orgSupervisor', 'practiceType'];
+        fields.forEach(key => {
+          const val = s[key] || '';
+          const cell = row.insertCell();
+          if (search && key === 'fio' && val.toLowerCase().includes(search)) {
+            const regex = new RegExp('('+search+')', 'gi');
+            cell.innerHTML = val.replace(regex, '<mark>$1</mark>');
+          } else {
+            cell.textContent = val;
+          }
+        });
+        const actions = row.insertCell();
+        actions.innerHTML = `<button onclick="editStudent('${s.id}')">✏️</button><button onclick="deleteStudent('${s.id}')">❌</button>`;
+      });
+
+      updateFilters(courseSet, groupSet, typeSet);
+    }
+
+    async function saveStudent() {
+      const student = {
+        fio: document.getElementById("fioT").value.trim(),
+        course: document.getElementById("courseT").value.trim(),
+        group: document.getElementById("groupT").value.trim(),
+        base: document.getElementById("baseT").value.trim(),
+        baseAddress: document.getElementById("baseAddressT").value.trim(),
+        basePhone: document.getElementById("basePhoneT").value.trim(),
+        studentPhone: document.getElementById("studentPhoneT").value.trim(),
+        orgSupervisor: document.getElementById("orgSupervisorT").value.trim(),
+        practiceType: document.getElementById("practiceTypeT").value.trim()
+      };
+      if (!student.fio || !student.group) return alert("ФИО и Группа обязательны");
+
+      if (editId) {
+        await db.collection("students").doc(editId).set(student);
+        editId = null;
+      } else {
+        await db.collection("students").add(student);
+      }
+
+      clearForm();
+      await renderTable();
+    }
+
+    async function editStudent(id) {
+      const doc = await db.collection("students").doc(id).get();
+      const s = doc.data();
+      editId = id;
+      document.getElementById("fioT").value = s.fio;
+      document.getElementById("courseT").value = s.course;
+      document.getElementById("groupT").value = s.group;
+      document.getElementById("baseT").value = s.base;
+      document.getElementById("baseAddressT").value = s.baseAddress;
+      document.getElementById("basePhoneT").value = s.basePhone;
+      document.getElementById("studentPhoneT").value = s.studentPhone;
+      document.getElementById("orgSupervisorT").value = s.orgSupervisor;
+      document.getElementById("practiceTypeT").value = s.practiceType;
+    }
+
+    async function deleteStudent(id) {
+      if (confirm("Удалить этого студента?")) {
+        await db.collection("students").doc(id).delete();
+        await renderTable();
+      }
+    }
+
+    function clearForm() {
+      ['fioT','courseT','groupT','baseT','baseAddressT','basePhoneT','studentPhoneT','orgSupervisorT','practiceTypeT'].forEach(id => {
+        document.getElementById(id).value = "";
+      });
+      editId = null;
+    }
+
+    function updateFilters(courseSet, groupSet, typeSet) {
+      const fc = document.getElementById("filterCourse");
+      const fg = document.getElementById("filterGroup");
+      const ft = document.getElementById("filterPracticeType");
+
+      fc.innerHTML = '<option value="">Все курсы</option>';
+      fg.innerHTML = '<option value="">Все группы</option>';
+      ft.innerHTML = '<option value="">Все виды практики</option>';
+
+      courseSet.forEach(c => fc.innerHTML += `<option value="${c}">${c}</option>`);
+      groupSet.forEach(g => fg.innerHTML += `<option value="${g}">${g}</option>`);
+      typeSet.forEach(t => ft.innerHTML += `<option value="${t}">${t}</option>`);
+    }
+
+    window.saveStudent = saveStudent;
+    window.editStudent = editStudent;
+    window.deleteStudent = deleteStudent;
+    window.clearForm = clearForm;
+
+    document.getElementById("search").addEventListener("input", renderTable);
+    document.getElementById("filterCourse").addEventListener("change", renderTable);
+    document.getElementById("filterGroup").addEventListener("change", renderTable);
+    document.getElementById("filterPracticeType").addEventListener("change", renderTable);
+  });
+
+</script>
+
+
+<!-- Firebase SDK -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+
+<!-- Основной скрипт -->
+<script>
+// --- Глобальные функции ---
+function selectRole(role) {
+  document.getElementById('roleSelect').classList.add('hidden');
+  if (role === 'student') {
+    const formBox = document.getElementById('studentFormBox');
+    formBox.classList.remove('hidden');
+
+    const form = document.getElementById("studentForm");
+    if (!form.dataset.bound) {
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const student = {
+          fio: document.getElementById("fio").value.trim(),
+          course: document.getElementById("course").value.trim(),
+          group: document.getElementById("group").value.trim(),
+          base: document.getElementById("base").value.trim(),
+          baseAddress: document.getElementById("baseAddress").value.trim(),
+          basePhone: document.getElementById("basePhone").value.trim(),
+          studentPhone: document.getElementById("studentPhone").value.trim(),
+          orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+          practiceType: document.getElementById("practiceType").value.trim()
+        };
+        await db.collection("students").add(student);
+        formBox.innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+      });
+      form.dataset.bound = "true";
+    }
+
+  } else {
+    document.getElementById('teacherLogin').classList.remove('hidden');
+  }
+}
+window.selectRole = selectRole;
+
+async function loginTeacher() {
+  const username = document.getElementById("username").value.trim().toLowerCase();
+  const password = document.getElementById("password").value.trim();
+  if (username === "федоренко" && password === "1234") {
+    document.getElementById("teacherLogin").classList.add("hidden");
+    document.getElementById("teacherApp").classList.remove("hidden");
+    await renderTable();
+  } else {
+    alert("Неверные данные!");
+  }
+}
+window.loginTeacher = loginTeacher;
+
+// Firebase init
+const firebaseConfig = {
+  apiKey: "AIzaSyDNELjfZYbOGlJjQENGOHPe5hRk1PywYVE",
+  authDomain: "anifailsstud.firebaseapp.com",
+  projectId: "anifailsstud",
+  storageBucket: "anifailsstud.firebasestorage.app",
+  messagingSenderId: "364592968832",
+  appId: "1:364592968832:web:2da01a80686e62879d6265",
+  measurementId: "G-PTHZWHEWBG"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// остальной JS будет работать после DOMContentLoaded
+document.addEventListener("DOMContentLoaded", function () {
+  document.getElementById("studentForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const student = {
+      fio: document.getElementById("fio").value.trim(),
+      course: document.getElementById("course").value.trim(),
+      group: document.getElementById("group").value.trim(),
+      base: document.getElementById("base").value.trim(),
+      baseAddress: document.getElementById("baseAddress").value.trim(),
+      basePhone: document.getElementById("basePhone").value.trim(),
+      studentPhone: document.getElementById("studentPhone").value.trim(),
+      orgSupervisor: document.getElementById("orgSupervisor").value.trim(),
+      practiceType: document.getElementById("practiceType").value.trim()
+    };
+    await db.collection("students").add(student);
+    document.getElementById('studentFormBox').innerHTML = "<p>Спасибо! Ваши данные сохранены.</p>";
+  });
+
+  let editId = null;
+
+  async function loadStudents() {
+    const snapshot = await db.collection("students").get();
+    const students = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.id = doc.id;
+      students.push(data);
+    });
+    return students;
+  }
+
+  async function renderTable() {
+    const students = await loadStudents();
+    const tbody = document.querySelector("#studentTable tbody");
+    const search = document.getElementById("search").value.trim().toLowerCase();
+    const filterCourse = document.getElementById("filterCourse").value;
+    const filterGroup = document.getElementById("filterGroup").value;
+    const filterPracticeType = document.getElementById("filterPracticeType").value;
+    tbody.innerHTML = "";
+
+    const courseSet = new Set(), groupSet = new Set(), typeSet = new Set();
+
+    students.forEach((s) => {
+      courseSet.add(s.course);
+      groupSet.add(s.group);
+      typeSet.add(s.practiceType);
+
+      if ((search && !s.fio.toLowerCase().includes(search)) ||
+        (filterCourse && s.course !== filterCourse) ||
+        (filterGroup && s.group !== filterGroup) ||
+        (filterPracticeType && s.practiceType !== filterPracticeType)) return;
+
+      const row = tbody.insertRow();
+      const fields = ['fio', 'course', 'group', 'base', 'baseAddress', 'basePhone', 'studentPhone', 'orgSupervisor', 'practiceType'];
+      fields.forEach(key => {
+        const val = s[key] || '';
+        const cell = row.insertCell();
+        if (search && key === 'fio' && val.toLowerCase().includes(search)) {
+          const regex = new RegExp('('+search+')', 'gi');
+          cell.innerHTML = val.replace(regex, '<mark>$1</mark>');
+        } else {
+          cell.textContent = val;
+        }
+      });
+      const actions = row.insertCell();
+      actions.innerHTML = `<button onclick="editStudent('${s.id}')">✏️</button><button onclick="deleteStudent('${s.id}')">❌</button>`;
+    });
+
+    updateFilters(courseSet, groupSet, typeSet);
+  }
+
+  async function saveStudent() {
+    const student = {
+      fio: document.getElementById("fioT").value.trim(),
+      course: document.getElementById("courseT").value.trim(),
+      group: document.getElementById("groupT").value.trim(),
+      base: document.getElementById("baseT").value.trim(),
+      baseAddress: document.getElementById("baseAddressT").value.trim(),
+      basePhone: document.getElementById("basePhoneT").value.trim(),
+      studentPhone: document.getElementById("studentPhoneT").value.trim(),
+      orgSupervisor: document.getElementById("orgSupervisorT").value.trim(),
+      practiceType: document.getElementById("practiceTypeT").value.trim()
+    };
+    if (!student.fio || !student.group) return alert("ФИО и Группа обязательны");
+
+    if (editId) {
+      await db.collection("students").doc(editId).set(student);
+      editId = null;
+    } else {
+      await db.collection("students").add(student);
+    }
+
+    clearForm();
+    await renderTable();
+  }
+
+  async function editStudent(id) {
+    const doc = await db.collection("students").doc(id).get();
+    const s = doc.data();
+    editId = id;
+    document.getElementById("fioT").value = s.fio;
+    document.getElementById("courseT").value = s.course;
+    document.getElementById("groupT").value = s.group;
+    document.getElementById("baseT").value = s.base;
+    document.getElementById("baseAddressT").value = s.baseAddress;
+    document.getElementById("basePhoneT").value = s.basePhone;
+    document.getElementById("studentPhoneT").value = s.studentPhone;
+    document.getElementById("orgSupervisorT").value = s.orgSupervisor;
+    document.getElementById("practiceTypeT").value = s.practiceType;
+  }
+
+  async function deleteStudent(id) {
+    if (confirm("Удалить этого студента?")) {
+      await db.collection("students").doc(id).delete();
+      await renderTable();
+    }
+  }
+
+  function clearForm() {
+    ['fioT','courseT','groupT','baseT','baseAddressT','basePhoneT','studentPhoneT','orgSupervisorT','practiceTypeT'].forEach(id => {
+      document.getElementById(id).value = "";
+    });
+    editId = null;
+  }
+
+  function updateFilters(courseSet, groupSet, typeSet) {
+    const fc = document.getElementById("filterCourse");
+    const fg = document.getElementById("filterGroup");
+    const ft = document.getElementById("filterPracticeType");
+
+    fc.innerHTML = '<option value="">Все курсы</option>';
+    fg.innerHTML = '<option value="">Все группы</option>';
+    ft.innerHTML = '<option value="">Все виды практики</option>';
+
+    courseSet.forEach(c => fc.innerHTML += `<option value="${c}">${c}</option>`);
+    groupSet.forEach(g => fg.innerHTML += `<option value="${g}">${g}</option>`);
+    typeSet.forEach(t => ft.innerHTML += `<option value="${t}">${t}</option>`);
+  }
+
+  window.saveStudent = saveStudent;
+  window.editStudent = editStudent;
+  window.deleteStudent = deleteStudent;
+  window.clearForm = clearForm;
+
+  document.getElementById("search").addEventListener("input", renderTable);
+  document.getElementById("filterCourse").addEventListener("change", renderTable);
+  document.getElementById("filterGroup").addEventListener("change", renderTable);
+  document.getElementById("filterPracticeType").addEventListener("change", renderTable);
+});
+</script>
+
+</body>
+</html>
